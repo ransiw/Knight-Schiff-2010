@@ -4,4 +4,4 @@ author: "Ransi"
 output: html_document
 ---
 
-## R Markdown
+### Step 1: Multinomial logistic on Pre-Iowa poll data
