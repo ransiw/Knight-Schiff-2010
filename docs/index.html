@@ -270,19 +270,27 @@ $(document).ready(function () {
 </div>
 
 
-<pre class="r"><code>summary(cars)</code></pre>
-<pre><code>##      speed           dist       
-##  Min.   : 4.0   Min.   :  2.00  
-##  1st Qu.:12.0   1st Qu.: 26.00  
-##  Median :15.0   Median : 36.00  
-##  Mean   :15.4   Mean   : 42.98  
-##  3rd Qu.:19.0   3rd Qu.: 56.00  
-##  Max.   :25.0   Max.   :120.00</code></pre>
-<div id="including-plots" class="section level2">
-<h2>Including Plots</h2>
-<p>You can also embed plots, for example:</p>
-<p><img src="index_files/figure-html/pressure-1.png" width="672" /></p>
-</div>
+<p>The first step of the estimation to isolated the parameters <span
+class="math inline">\(\{\eta_{cs}\}_{s \in S,c \in
+C\backslash\{0\}},\{\mu_{c1}\}_{c \in C\backslash\{0\}}\)</span> which
+are the pre-Iowa parameters. The <span
+class="math inline">\(\eta_{cs}\)</span> represent the time-invariant
+state specific preference for candidate <span
+class="math inline">\(c\)</span> over candidate <span
+class="math inline">\(0\)</span> in state <span
+class="math inline">\(s\)</span> which is sampled from the distribution
+<span class="math inline">\(\mathcal{N}(0,\sigma^2_{\eta})\)</span>. The
+<span class="math inline">\(\mu_{c1}, \mu_{d1}\)</span> parameters are
+the pre-Iowa mean of the prior of candidate quality. Particularly,
+candidate quality is distributed <span class="math inline">\(q_c \sim
+\mathcal{N}(\mu_{c1},\sigma^2_1)\)</span>.</p>
+<p>The estimation step is performed by a multinomial logistic regression
+on just the state dummy variables. Equation (21) of the paper</p>
+<p><span
+class="math display">\[Pr(E(u_{cis}|\eta_{cs},v_{cis})&gt;E(u_{dis}|\eta_{ds},v_{dis})
+\forall d \neq c) = \]</span> <span
+class="math display">\[\frac{\exp(\eta_{cs}+\mu_{c1})}{\sum_{d=0}^C
+\exp(\eta_{ds}+\mu_{d1})}\]</span></p>
 
 
 
