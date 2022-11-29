@@ -1,0 +1,12 @@
+name: "replication-website"
+navbar:
+  title: "Replication : Knight and Schiff (2010)"
+  left:
+    - text: "Model"
+      href: index.html
+    - text: "Estimation"
+      href: about.html
+output:
+  html_document:
+    theme: cosmo
+    highlight: textmate
