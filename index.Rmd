@@ -5,15 +5,10 @@ output: html_document
 ---
 
 
-```{r cars}
-summary(cars)
-```
+The first step of the estimation to isolated the parameters $\{\eta_{cs}\}_{s \in S,c \in C\backslash\{0\}},\{\mu_{c1}\}_{c \in C\backslash\{0\}}$ which are the pre-Iowa parameters. The $\eta_{cs}$ represent the time-invariant state specific preference for candidate $c$ over candidate $0$ in state $s$ which is sampled from the distribution $\mathcal{N}(0,\sigma^2_{\eta})$. The $\mu_{c1}, \mu_{d1}$ parameters are the pre-Iowa mean of the prior of candidate quality. Particularly, candidate quality is distributed $q_c \sim \mathcal{N}(\mu_{c1},\sigma^2_1)$. 
 
-## Including Plots
+The estimation step is performed by a multinomial logistic regression on just the state dummy variables. Equation (21) of the paper  
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
+\[Pr(E(u_{cis}|\eta_{cs},v_{cis})>E(u_{dis}|\eta_{ds},v_{dis}) \forall d \neq c) = \]
+\[\frac{\exp(\eta_{cs}+\mu_{c1})}{\sum_{d=0}^C \exp(\eta_{ds}+\mu_{d1})}\]
 
