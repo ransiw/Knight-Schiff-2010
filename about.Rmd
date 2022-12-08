@@ -4,4 +4,263 @@ author: "Ransi"
 output: html_document
 ---
 
-### Step 1: Multinomial logistic on Pre-Iowa poll data
+### Step 1: Multinomial logistic on Pre-Iowa poll data 
+
+#### : Initial run without standard errors
+
+This step calculates the $\eta_{cs}$, by running a regression on dummy variables for the states
+
+Load the following packages and the datafile `complete_data.dta`. 
+
+```{r}
+folderpath = "~/Dropbox/Knight_Schiff/Knight-Schiff-2010/Data"
+```
+
+
+```{r}
+library(tidyverse)
+library(haven)
+library(nnet)
+complete_data = read_dta(file.path(folderpath,"complete_data.dta"))
+```
+
+Then filtering for only for those polled before the Iowa run a regression and running the regression using the `multinom` function. We take John Kerry as the reference candidate, or candidate 0. 
+
+```{r}
+data = complete_data %>% filter(t==1) %>% select(crb06,starts_with("s_")) %>% 
+  mutate(crb06=relevel(as.factor(crb06),ref=3))
+reg1 <- multinom(crb06 ~ . , data = data, trace=FALSE)
+coefficients(reg1)
+```
+
+####: Bootstrapping and standard errors
+
+The paper reports bootstrapped standard errors with the median of the distribution as coefficients.
+I create two functions, one creating the bootstrap sample and returning the output and the other extracting estimates for Dean and Edwards. The following function returns a bootstrap sample which is sampled with states as blocks and returns the output of the sample. 
+
+```{r}
+block_sample = function(X){
+  sample0 = X %>% group_by(cst) %>% sample_n(size =count[1], replace = TRUE) %>% 
+    ungroup() %>% 
+    select(crb06,starts_with("s_")) %>% 
+    mutate(crb06=relevel(as.factor(crb06),ref=3))
+  out = coef(multinom(crb06 ~  . , data = sample0, trace="FALSE"))
+  return(out)
+}
+```
+
+and this function splits the output into the two candidates
+
+```{r}
+extract_multinom_coefs = function(result_boot,pos){
+  out= data.frame(coefs=result_boot[pos,])
+  out$coef_names = row.names(out)
+  outval= list(data=out,ncoefs=dim(out)[1])
+  return(outval)
+}
+```
+
+Create the field `count` for the block bootstrap
+
+```{r}
+data0 = complete_data %>% filter(t==1) %>% 
+  select(crb06, cst, starts_with("s_")) %>% group_by(cst) %>% 
+  mutate(count = n()) %>% 
+  ungroup()
+```
+
+Initialize a matrix to save the bootstrap output
+
+```{r}
+coef1_mat = data.frame(coefs=coef(reg1)[1,])
+coef1_mat$coef_names = row.names(coef1_mat)
+coef1_mat = coef1_mat %>% select(coef_names, coefs)
+coef2_mat = data.frame(coefs=coef(reg1)[2,])
+coef2_mat$coef_names = row.names(coef2_mat)
+coef2_mat = coef2_mat %>% select(coef_names, coefs)
+```
+
+Run the `200` bootstrap samples
+
+```{r}
+set.seed(1234)
+counter=0
+while (counter<200){
+  coef_sample = block_sample(data0)
+  coef1_sample = extract_multinom_coefs(coef_sample,1)$data
+  ncoefs = extract_multinom_coefs(coef_sample,1)$ncoefs
+  if (ncoefs==42){
+    coef1_mat = full_join(coef1_mat, coef1_sample, by="coef_names", suffix = c(as.character(counter),as.character(counter+1)))
+    coef2_sample = extract_multinom_coefs(coef_sample,2)$data
+    coef2_mat = full_join(coef2_mat, coef2_sample, by="coef_names", suffix = c(as.character(counter),as.character(counter+1)))
+    counter = counter+1
+  }
+  else
+    {
+    counter=counter
+  }
+}
+```
+
+For each row create the median, the 2nd percentile and the 98th percentile respectively, these will be the equivalent of Table 1 reported in the paper
+
+```{r}
+coef1_stats = coef1_mat %>% select(c(1,2))
+coef1_stats$median = apply(coef1_mat[,2:ncol(coef1_mat)],1,quantile,probs=0.5)
+coef1_stats$p2 = apply(coef1_mat[,2:ncol(coef1_mat)],1,quantile,probs=0.02)
+coef1_stats$p98 = apply(coef1_mat[,2:ncol(coef1_mat)],1,quantile,probs=0.98)
+```
+
+Repeat for 
+
+```{r}
+coef2_stats = coef2_mat %>% select(c(1,2))
+coef2_stats$median = apply(coef2_mat[,2:ncol(coef2_mat)],1,quantile,probs=0.5)
+coef2_stats$p2 = apply(coef2_mat[,2:ncol(coef2_mat)],1,quantile,probs=0.02)
+coef2_stats$p98 = apply(coef2_mat[,2:ncol(coef2_mat)],1,quantile,probs=0.98)
+```
+
+Load the dataset that contains the electoral results
+
+```{r}
+results = read_dta(file.path(folderpath,"complete_data1.dta"))
+```
+
+Replace the missing value for the Vermont primary for Edwards
+
+```{r}
+results[which(results$state=="VT"),"ledwards"] = log(5113/results[which(results$state=="VT"),"kerry"])
+```
+
+Isolate the states that we require the $\eta_{cs}$ data from, and find their names, then append the timing of the primary here. The resulting file is `states`. 
+
+```{r}
+states = complete_data %>% select(cst, starts_with("s_"),t) %>% rename(state=cst) %>%
+  right_join(results %>% select(state,tt), by="state") %>% filter(!state=="NH")
+states = data.frame(freq =colMeans(states %>% select(starts_with("s_")),na.rm = TRUE))
+states$state = row.names(states)
+states = states %>% filter(freq>0)
+states = c(states$state,"s_24")
+states2 = complete_data %>% select(c(all_of(states)))
+states2 = data.frame( "name" = names(states2), "label" = sapply(states2, function(x) attr(x, "label")) %>% as.character(), "labelled" = sapply(states2, is.labelled)) %>% 
+  mutate(state=substr(label,6,7)) %>% select(name,state) %>% rename(coef_names=name)
+states = states2 %>% left_join(results %>% select(state,t) ,by="state") %>% distinct(state, .keep_all = TRUE)
+```
+
+Report the $\eta_{cs}$ estimates for these states
+
+```{r}
+coef1_stats %>% right_join(states, by = "coef_names") %>% 
+  arrange(t) %>%
+  mutate(CI = paste("[",as.character(round(p2,3)),",",as.character(round(p98,3)),"]")) %>%
+  select(state,median,CI) 
+```
+The estimated $\mu_{c1}$ for Dean and Edwards. 
+
+```{r}
+print(paste("For Dean,",coef1_stats[1,"median"]))
+print(paste("For Edwards,",coef2_stats[1,"median"]))
+```
+
+Then report the estimate for $\sigma^2_\eta$. 
+
+```{r}
+var(c(coef1_stats$median, coef2_stats$median))
+```
+
+
+Then re-center the estimates to obtain the $\eta_{cs}$ that goes into the estimation. 
+
+```{r}
+states = states %>% left_join(coef1_stats %>%  mutate(eta1=median-coef1_stats[1,"median"] ) %>% select(coef_names,eta1),by="coef_names")
+states = states %>% left_join(coef2_stats %>%  mutate(eta2=median-coef2_stats[1,"median"] ) %>% select(coef_names,eta2),by="coef_names")
+```
+
+### Step 2 : Now run the functions for the estimation of $\sigma_1$ and $\sigma_\epsilon$
+
+The formula for $\alpha_t$ is 
+
+\[\alpha_t = \frac{\sigma_t^2}{\sigma_t^2+\sigma^2_\epsilon}\]
+
+The following function takes in two variables and creates the $\alpha_t$ value
+
+```{r}
+alpha_f = function(st,seps){
+  out = st/(st+seps)
+  return(out)
+}
+```
+
+The formula for $\beta_t$ is 
+
+\[\beta_t = \frac{N_t\sigma^2_t}{N_t\sigma^2_t + (\sigma^2_\eta/\alpha^2_t)+\sigma^2_\epsilon}\]
+
+The function to create this variables is
+
+```{r}
+beta_f = function(Nt,st,seta,alphat,seps){
+  out = (Nt*st)/(Nt*st+(seta+alphat^2)+seps)
+  return(out)
+}
+```
+
+Next step updates $\mu_{dt}, \mu_{et}$. 
+
+\[\mu_{ct+1} = \mu_{ct} + \frac{\beta_t/N_t}{\alpha_t}\sum_{s_t\in \Omega_t}[\ln(v_{cst}/v_{0st})-\mu_{ct}]\]
+
+```{r}
+mu_f = function(Nt,betat,alphat,lvote,mu_ct){
+  out = mu_ct + ((betat/Nt)/alphat)*sum(lvote-mu_ct)
+  return(out)
+}
+```
+
+Then the $\sigma_t$ is updated as follows
+\[\frac{1}{\sigma^2_{t+1}} = \frac{1}{\sigma^2_{t}}+\frac{N_t}{(\sigma^2_{\eta}/\alpha^2_t)+\sigma^2_\epsilon}\]
+
+```{r}
+sigma_f = function(st,Nt,seta,alphat,seps){
+  out = (1/st)+(Nt/(seta/alphat^2)+seps)
+  return(1/out)
+}
+```
+
+Create a dataframe with just dummies `i_2` and `i_3` for those who voted for Dean and Edwards respectively only in the periods after the election took place
+
+```{r}
+list_states = states %>% group_by(t) %>% mutate(state_list=list(state)) %>% ungroup() %>% select(t,state_list) %>% distinct()
+poll_dummies = complete_data %>% 
+  mutate(t=t-1) %>%
+  rename(state=cst) %>%
+  select(state,t,i_2,i_3,edate) %>%
+  filter(t>0)
+```
+
+
+The first maximization function would take the values of $\sigma_1$ and $\sigma_\epsilon$ as given
+and optimize the values for $\alpha_t$, $\beta_t, \mu_{ct}$. 
+
+`par` is a 2 by 1 vector for the variables $(\sigma_1, \sigma_\epsilon)$
+`vec` includes the variables for $(\sigma^2_\eta,\mu_{d1},\mu_{e1})$
+
+```{r}
+llog = function(data,vec,par){
+  sigmat_vec = c(par[1],rep(0,9))
+  alpha_vec = rep(0,10)
+  beta_vec = rep(0,10)
+  mud_vec = c(vec[2],rep(0,9))
+  mue_vec = c(vec[3],rep(0,9))
+  for (t in c(1:9)){
+    alpha_vec[t] = alpha_f(sigmat_vec[t],par[2])
+    n_t = data[which(data$tt==t),"nt"][1,1]
+    beta_vec[t] = beta_f(n_t,sigmat_vec[t],vec[1],alpha_vec[t],par[2])
+    lvoted = data[which(data$tt==t),"ldean"]
+    lvotee = data[which(data$tt==t),"ledwards"]
+    mud_vec[t+1] = mu_f(n_t,beta_vec[t],alpha_vec[t],lvotee,mud_vec[1])
+    mue_vec[t+1] = mu_f(n_t,beta_vec[t],alpha_vec[t],lvotee,mue_vec[1])
+    sigmat_vec[t+1] = sigma_f(sigmat_vec[t],n_t,vec[1],alpha_vec[t],par[2])
+  }
+  return(mud_vec)
+}
+```
+
